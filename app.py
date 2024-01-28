@@ -1,32 +1,27 @@
+import os
+from flask import Flask, render_template, request
 import pandas as pd
 import numpy as np
 import sys
-from flask import Flask
 
 app = Flask(__name__)
-
-def cp():
-    if len(sys.argv) != 5:
-        print("Usage: python <prog.py> <InFile> <W> <I> <RFile>")
-        sys.exit(1)
 
 def rid(inf):
     try:
         d = pd.read_csv(inf)
         return d
     except FileNotFoundError:
-        print("File not found.")
-        sys.exit(1)
+        return None
 
 def vid(d):
     if len(d.columns) < 3:
-        print("Input file must contain three or more columns.")
-        sys.exit(1)
+        return False
 
     for c in d.columns[1:]:
         if not pd.api.types.is_numeric_dtype(d[c]):
-            print("Columns from 2nd to last must contain numeric values only.")
-            sys.exit(1)
+            return False
+
+    return True
 
 def nm(m):
     nm = m / np.linalg.norm(m, axis=0)
@@ -72,32 +67,45 @@ def pt(d, w, i):
     d['TS'] = s
     d['R'] = tr(s)
 
-def m():
-    cp()
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        try:
+            inf = request.form['inf']
+            w = np.array(list(map(float, request.form['w'].split(','))))
+            i = np.array([1 if j == '+' else -1 for j in request.form['i'].split(',')])
+            rf = request.form['rf']
 
-    # Use environment variable for SECRET_KEY
-    secret_key = os.environ.get('SECRET_KEY', 'default_secret_key')
-    app.config['SECRET_KEY'] = secret_key
+            d = rid(inf)
 
-    inf = sys.argv[1]
-    w = np.array(list(map(float, sys.argv[2].split(','))))
-    i = np.array([1 if j == '+' else -1 for j in sys.argv[3].split(',')])
-    rf = sys.argv[4]
+            if d is None:
+                return render_error("File not found.")
 
-    d = rid(inf)
-    vid(d)
+            if not vid(d):
+                return render_error("Input file must contain three or more columns, and numeric values only.")
 
-    if len(w) != len(i) or len(w) != len(d.columns) - 1:
-        print("Number of weights, impacts, and columns must be the same.")
-        sys.exit(1)
+            if len(w) != len(i) or len(w) != len(d.columns) - 1:
+                return render_error("Number of weights, impacts, and columns must be the same.")
 
-    for j in i:
-        if j not in [1, -1]:
-            print("Impacts must be either +ve or -ve.")
-            sys.exit(1)
+            for j in i:
+                if j not in [1, -1]:
+                    return render_error("Impacts must be either +ve or -ve.")
 
-    pt(d, w, i)
-    sr(d, rf)
+            pt(d, w, i)
+            sr(d, rf)
+
+            return render_success(d)
+
+        except Exception as e:
+            return render_error(str(e))
+
+    return render_template('index.html')
+
+def render_error(error_message):
+    return render_template('error.html', error_message=error_message)
+
+def render_success(result_df):
+    return render_template('success.html', result_table=result_df.to_html(index=False))
 
 if __name__ == "__main__":
-    m()
+    app.run(debug=True)
