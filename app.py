@@ -1,10 +1,18 @@
 import os
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 import pandas as pd
 import numpy as np
 import sys
 
 app = Flask(__name__)
+
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'csv'}
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def rid(inf):
     try:
@@ -71,30 +79,36 @@ def pt(d, w, i):
 def index():
     if request.method == 'POST':
         try:
-            inf = request.form['inf']
+            inf_file = request.files['inf']
             w = np.array(list(map(float, request.form['w'].split(','))))
             i = np.array([1 if j == '+' else -1 for j in request.form['i'].split(',')])
             rf = request.form['rf']
 
-            d = rid(inf)
+            if inf_file and allowed_file(inf_file.filename):
+                inf_filename = os.path.join(app.config['UPLOAD_FOLDER'], inf_file.filename)
+                inf_file.save(inf_filename)
 
-            if d is None:
-                return render_error("File not found.")
+                d = rid(inf_filename)
 
-            if not vid(d):
-                return render_error("Input file must contain three or more columns, and numeric values only.")
+                if d is None:
+                    return render_error("File not found.")
 
-            if len(w) != len(i) or len(w) != len(d.columns) - 1:
-                return render_error("Number of weights, impacts, and columns must be the same.")
+                if not vid(d):
+                    return render_error("Input file must contain three or more columns, and numeric values only.")
 
-            for j in i:
-                if j not in [1, -1]:
-                    return render_error("Impacts must be either +ve or -ve.")
+                if len(w) != len(i) or len(w) != len(d.columns) - 1:
+                    return render_error("Number of weights, impacts, and columns must be the same.")
 
-            pt(d, w, i)
-            sr(d, rf)
+                for j in i:
+                    if j not in [1, -1]:
+                        return render_error("Impacts must be either +ve or -ve.")
 
-            return render_success(d)
+                pt(d, w, i)
+                sr(d, rf)
+
+                return render_success(d)
+
+            return render_error("Invalid file format. Please upload a CSV file.")
 
         except Exception as e:
             return render_error(str(e))
@@ -108,4 +122,5 @@ def render_success(result_df):
     return render_template('success.html', result_table=result_df.to_html(index=False))
 
 if __name__ == "__main__":
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     app.run(debug=True)
