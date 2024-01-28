@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 import sys
+from flask import Flask
+
+app = Flask(__name__)
 
 def cp():
     if len(sys.argv) != 5:
@@ -71,6 +74,10 @@ def pt(d, w, i):
 
 def m():
     cp()
+
+    # Use environment variable for SECRET_KEY
+    secret_key = os.environ.get('SECRET_KEY', 'default_secret_key')
+    app.config['SECRET_KEY'] = secret_key
 
     inf = sys.argv[1]
     w = np.array(list(map(float, sys.argv[2].split(','))))
